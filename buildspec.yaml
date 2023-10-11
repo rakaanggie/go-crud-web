@@ -1,0 +1,30 @@
+env:
+  variables:
+    AWS_REGION: us-east-1
+
+phases:
+  pre_build:
+    commands:
+      - echo "Install dependencies and login into ECR"
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - aws configure set aws_access_key_id $aws_access_key_id
+      - aws configure set aws_secret_access_key $aws_secret_access_key
+      - aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER
+      - kubectl get svc
+      - TAG="$(date +%Y-%m-%d.%H.%M.%S).$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | head -c 8)"
+      - ECR_REPO=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_NAME:$TAG
+      - sed -i 's@CONTAINER_IMAGE@'"$ECR_REPO"'@' manifest/deployment.yaml
+  build:
+    commands:
+      - echo "run unit testing and build docker image"
+      - docker build -t $ECR_REPO .
+  post_build:
+    commands:
+      - echo "push image into ECR"
+      - docker push $ECR_REPO
+      - kubectl apply -f manifest/deployment.yaml
+      - printf '[{"name":"%s","imageUri":"%s"}]' $CONTAINER_NAME $ECR_REPO > imagedefinitions.json
+
+artifacts:
+  files:
+    - imagedefinitions.json
