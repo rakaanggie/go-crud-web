@@ -1,3 +1,6 @@
+version: 0.2
+run as: root
+
 env:
   variables:
     AWS_REGION: us-east-1
